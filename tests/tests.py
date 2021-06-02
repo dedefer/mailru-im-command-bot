@@ -129,6 +129,9 @@ class Tests(unittest.TestCase):
                 cmd, '/cmd',
             )
 
+    def test_check_args(self):
+        CommandBot._check_args(cmd)
+
 
 if __name__ == '__main__':
     unittest.main()

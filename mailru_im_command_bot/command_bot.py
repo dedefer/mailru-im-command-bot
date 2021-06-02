@@ -233,8 +233,8 @@ class CommandBot:
         for p in cls._parameters(func):
             if p.annotation is not p.empty:
                 if (
-                    p.annotation not in (str, int, float) or
-                    isinstance(p.annotation, EnumMeta)
+                    p.annotation not in (str, int, float) and
+                    not isinstance(p.annotation, EnumMeta)
                 ):
                     raise Exception(
                         f'improperly configured: param type {p} '
