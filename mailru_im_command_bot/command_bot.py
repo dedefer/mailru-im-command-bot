@@ -231,25 +231,26 @@ class CommandBot:
     @classmethod
     def _check_args(cls, func: CommandHandler):
         for p in cls._parameters(func):
-            if p.annotation is not p.empty:
+            ann = p.annotation
+            if ann is not p.empty:
                 if (
-                    p.annotation not in (str, int, float) and
-                    not isinstance(p.annotation, EnumMeta)
+                    ann not in (str, int, float) and
+                    not isinstance(ann, EnumMeta)
                 ):
                     raise Exception(
                         f'improperly configured: param type {p} '
                         'is not supported. must be str, int or float, or Enum'
                     )
             else:
-                p.annotation = str
+                ann = str
 
             if (
                 p.default is not p.empty and
-                not isinstance(p.default, p.annotation)
+                not isinstance(p.default, ann)
             ):
                 raise Exception(
                     'improperly configured: '
-                    f'param default {p} is not instance of {p.annotation}'
+                    f'param default {p} is not instance of {ann}'
                 )
 
     @classmethod
