@@ -24,6 +24,10 @@ class BadArg(Exception):
     pass
 
 
+class ImproperlyConfigured(Exception):
+    pass
+
+
 CommandHandler = Callable[[MessageEnv, VarArg(), KwArg()], str]
 
 Handler = Callable[[Bot, Event], None]
@@ -94,16 +98,15 @@ class CommandBot:
         def decorator(func: CommandHandler) -> CommandHandler:
             self._check_args(func)
             self.paths.append((path, func))
+            self.bot.dispatcher.add_handler(StdCommandHandler(
+                command=path, callback=self._decorate(path, func),
+            ))
+
             return func
 
         return decorator
 
-    def start(self):
-        for path, cb in self.paths:
-            self.bot.dispatcher.add_handler(StdCommandHandler(
-                command=path, callback=self._decorate(path, cb),
-            ))
-
+    def register_help(self):
         help_cb = self._access_log(self._help_cb)
         self.bot.dispatcher.add_handler(
             HelpCommandHandler(callback=help_cb),
@@ -113,6 +116,8 @@ class CommandBot:
             StartCommandHandler(callback=help_cb)
         )
 
+    def start(self):
+        self.register_help()
         self.bot.start_polling()
 
     @classmethod
@@ -237,7 +242,7 @@ class CommandBot:
                     ann not in (str, int, float) and
                     not isinstance(ann, EnumMeta)
                 ):
-                    raise Exception(
+                    raise ImproperlyConfigured(
                         f'improperly configured: param type {p} '
                         'is not supported. must be str, int or float, or Enum'
                     )
@@ -248,7 +253,7 @@ class CommandBot:
                 p.default is not p.empty and
                 not isinstance(p.default, ann)
             ):
-                raise Exception(
+                raise ImproperlyConfigured(
                     'improperly configured: '
                     f'param default {p} is not instance of {ann}'
                 )

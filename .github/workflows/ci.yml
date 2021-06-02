@@ -1,0 +1,31 @@
+on: [push]
+
+name: lint and test
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Setup Python
+        uses: actions/setup-python@master
+        with:
+          python-version: 3.7
+      - name: Setup packages
+        run: |
+          pip install poetry
+          poetry install
+      - name: Lint
+        run: poetry run make lint
+      - name: Test and Coverage
+        run: |
+          poetry run make test
+          poetry run coverage xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
+          verbose: true

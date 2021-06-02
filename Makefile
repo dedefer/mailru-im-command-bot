@@ -5,4 +5,4 @@ lint:
 	mypy .
 
 test:
-	python3 -m tests.tests
+	coverage run --source=mailru_im_command_bot -m tests.tests
