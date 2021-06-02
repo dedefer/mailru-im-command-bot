@@ -28,7 +28,11 @@ class ImproperlyConfigured(Exception):
     pass
 
 
-CommandHandler = Callable[[MessageEnv, VarArg(), KwArg()], str]
+ArgType = Union[str, int, float, bool, Enum]
+
+ArgSigType = Union[Type[str], Type[int], Type[float], Type[bool], EnumMeta]
+
+CommandHandler = Callable[[MessageEnv, VarArg(ArgType), KwArg(ArgType)], str]
 
 Handler = Callable[[Bot, Event], None]
 
@@ -89,6 +93,8 @@ class CommandBot:
             float_arg: float = 1.0,  # optional
             str_arg: str = 'test_str',  # optional
             enum_arg: ExampleEnum = ExampleEnum.case_one,  # optional
+            implicit_str_arg = 'implicit_str',  # optional
+            bool_arg: bool = True,  # optional
         ) -> str:
             """your function help message"""
             ...
@@ -126,6 +132,7 @@ class CommandBot:
             int: 'int',
             float: 'float',
             str: 'str',
+            bool: 'True|False',
         }
 
         if param.annotation in types_to_str:
@@ -239,7 +246,7 @@ class CommandBot:
             ann = p.annotation
             if ann is not p.empty:
                 if (
-                    ann not in (str, int, float) and
+                    ann not in (str, int, float, bool) and
                     not isinstance(ann, EnumMeta)
                 ):
                     raise ImproperlyConfigured(
@@ -261,9 +268,8 @@ class CommandBot:
     @classmethod
     def _cast_arg(
         cls, param: Parameter, arg: str
-    ) -> Union[str, int, float, Enum]:
-        ann: Union[Type[str], Type[int], Type[float], EnumMeta]
-        ann = param.annotation
+    ) -> ArgType:
+        ann: ArgSigType = param.annotation
 
         if isinstance(ann, EnumMeta):
             try:
@@ -271,42 +277,83 @@ class CommandBot:
             except KeyError:
                 raise BadArg(f'{arg!r} is bad param for {ann}')
 
-        if ann is float or ann is int:
+        if ann in (float, int):
             try:
                 return ann(arg)
             except ValueError:
                 raise BadArg(f'can\'t cast param {arg!r} to {ann}')
 
+        if ann is bool:
+            arg = arg.lower()
+            if arg == 'true':
+                return True
+            elif arg == 'false':
+                return False
+            else:
+                raise BadArg(f'can\t cast param {arg!r} to {ann}')
+
         return arg
 
     @classmethod
     def _gen_kwargs(
-        cls, params: Iterable[Parameter], msg_args: List[str],
-    ) -> Dict[str, Union[str, int, float, Enum]]:
-        kwargs = {}
-        for i, param in enumerate(params):
-            if param.default is param.empty:
-                kwargs[param.name] = cls._cast_arg(param, msg_args[i])
-                continue
+        cls, params: List[Parameter], msg_args: List[str],
+    ) -> Dict[str, ArgType]:
+        splited_args = [arg.split('=', 1) for arg in msg_args]
+        # not allow commands like /cmd 1 2 c=3 4
+        single_or_pair = list(map(len, splited_args))
+        if sorted(single_or_pair) != single_or_pair:
+            raise BadArg(
+                'you can\'t use positional arguments after key-value arguments'
+            )
 
-            if i < len(msg_args):
-                kwargs[param.name] = cls._cast_arg(param, msg_args[i])
-                continue
+        default_kwargs = {
+            p.name: p.default
+            for p in params
+            if p.default is not p.empty
+        }
 
-            kwargs[param.name] = param.default
+        params_by_name = {
+            p.name: p
+            for p in params
+        }
+
+        try:
+            kwarg_kwargs = {
+                kv[0]: cls._cast_arg(params_by_name[kv[0]], kv[1])
+                for kv in splited_args
+                if len(kv) == 2
+            }
+        except KeyError as e:
+            raise BadArg(f'no argument with name {e}')
+
+        try:
+            positional_args = msg_args[:single_or_pair.index(2)]
+        except ValueError:
+            positional_args = msg_args
+
+        positional_kwargs = {
+            p.name: cls._cast_arg(p, pos_arg)
+            for p, pos_arg in zip(params, positional_args)
+        }
+
+        kwargs = {
+            **default_kwargs,
+            **positional_kwargs,
+            **kwarg_kwargs,
+        }
+
+        for param in params:
+            if param.name not in kwargs:
+                raise BadArg(f'no value for arg {param.name!r}')
 
         return kwargs
 
     @classmethod
     def _get_kwargs_from_msg(
         cls, func: CommandHandler, msg: str,
-    ) -> Dict[str, Union[str, int, float, Enum]]:
-        try:
-            msg_args = [a for a in msg.split() if a][1:]
-
-            return cls._gen_kwargs(cls._parameters(func), msg_args)
-        except IndexError:
-            raise BadArg(f'wrong argument number: got {len(msg_args)}')
+    ) -> Dict[str, ArgType]:
+        msg_args = [a for a in msg.split() if a][1:]
+        return cls._gen_kwargs(cls._parameters(func), msg_args)
 
     def _command_args_decorator(
         self, path: str, func: CommandHandler,

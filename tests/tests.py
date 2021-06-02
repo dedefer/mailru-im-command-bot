@@ -21,7 +21,8 @@ def cmd(
     float_arg: float = 1.0,  # optional
     str_arg: str = 'test_str',  # optional
     enum_arg: ExampleEnum = ExampleEnum.case_one,  # optional
-    str_arg2='test_str',  # optional
+    implicit_str_arg='test_str',  # optional
+    bool_arg: bool = True,
 ) -> str:
     """your function help message"""
     ...
@@ -38,7 +39,8 @@ class Tests(unittest.TestCase):
             float_arg: float = 1.0
             str_arg: str = test_str
             enum_arg: case_one|case_two = case_one
-            str_arg2: str = test_str''')
+            implicit_str_arg: str = test_str
+            bool_arg: True|False = True''')
 
         help_msg = CommandBot._gen_function_help('cmd', cmd)
 
@@ -56,7 +58,8 @@ class Tests(unittest.TestCase):
             float_arg: float = 1.0
             str_arg: str = test_str
             enum_arg: case_one|case_two = case_one
-            str_arg2: str = test_str
+            implicit_str_arg: str = test_str
+            bool_arg: True|False = True
 
         /cmd_alias
           your function help message
@@ -65,7 +68,8 @@ class Tests(unittest.TestCase):
             float_arg: float = 1.0
             str_arg: str = test_str
             enum_arg: case_one|case_two = case_one
-            str_arg2: str = test_str''')
+            implicit_str_arg: str = test_str
+            bool_arg: True|False = True''')
 
         help_msg = CommandBot._gen_help('my help msg', [
             ('cmd', cmd),
@@ -79,66 +83,122 @@ class Tests(unittest.TestCase):
             'int_arg': 1,
             'float_arg': 0.0,
             'str_arg': 'some',
-            'str_arg2': 'some',
+            'implicit_str_arg': 'some',
             'enum_arg': ExampleEnum.case_two,
+            'bool_arg': False,
         }
 
-        kwargs = CommandBot._get_kwargs_from_msg(
-            cmd, '/cmd 1  0   some case_two some ',
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(
+                cmd, '/cmd 1  0   some case_two some False',
+            ),
+            expected,
         )
 
-        self.assertEqual(kwargs, expected)
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(
+                cmd,
+                '/cmd int_arg=1  float_arg=0   str_arg=some '
+                'enum_arg=case_two implicit_str_arg=some bool_arg=False',
+            ),
+            expected,
+        )
+
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(
+                cmd,
+                '/cmd '
+                'enum_arg=case_two implicit_str_arg=some bool_arg=False '
+                'int_arg=1  float_arg=0   str_arg=some ',
+            ),
+            expected,
+        )
 
     def test_parse_args_defaults(self):
         expected = {
             'int_arg': 1,
             'float_arg': 1.0,
             'str_arg': 'test_str',
-            'str_arg2': 'test_str',
+            'implicit_str_arg': 'test_str',
             'enum_arg': ExampleEnum.case_one,
+            'bool_arg': True,
         }
 
-        kwargs = CommandBot._get_kwargs_from_msg(
-            cmd, '/cmd 1',
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd 1'),
+            expected,
         )
 
-        self.assertEqual(kwargs, expected)
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd int_arg=1'),
+            expected,
+        )
 
     def test_parse_args_partial_defaults(self):
         expected = {
             'int_arg': 1,
             'float_arg': 0.0,
             'str_arg': 'test_str',
-            'str_arg2': 'test_str',
+            'implicit_str_arg': 'test_str',
             'enum_arg': ExampleEnum.case_one,
+            'bool_arg': True,
         }
 
-        kwargs = CommandBot._get_kwargs_from_msg(
-            cmd, '/cmd 1 0',
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd 1 0'),
+            expected,
         )
 
-        self.assertEqual(kwargs, expected)
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd int_arg=1 float_arg=0'),
+            expected,
+        )
+
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd float_arg=0 int_arg=1'),
+            expected,
+        )
+
+        self.assertEqual(
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd 1 bool_arg=False'),
+            {
+                'int_arg': 1,
+                'float_arg': 1.0,
+                'str_arg': 'test_str',
+                'implicit_str_arg': 'test_str',
+                'enum_arg': ExampleEnum.case_one,
+                'bool_arg': False,
+            },
+        )
 
     def test_parse_args_bad_type(self):
         with self.assertRaisesRegex(BadArg, 'float'):
-            CommandBot._get_kwargs_from_msg(
-                cmd, '/cmd 1  asd   some case_two  ',
-            )
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd 1  asd   some case_two')
 
         with self.assertRaisesRegex(BadArg, 'int'):
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd qwe  1   some case_two')
+
+        with self.assertRaisesRegex(BadArg, 'bool'):
             CommandBot._get_kwargs_from_msg(
-                cmd, '/cmd qwe  1   some case_two  ',
+                cmd, '/cmd 1 1 some case_two some not_bool',
             )
 
         with self.assertRaisesRegex(BadArg, 'ExampleEnum'):
-            CommandBot._get_kwargs_from_msg(
-                cmd, '/cmd 1  1   some case  ',
-            )
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd 1  1   some case  ')
 
-        with self.assertRaisesRegex(BadArg, 'wrong argument number'):
-            CommandBot._get_kwargs_from_msg(
-                cmd, '/cmd',
-            )
+        with self.assertRaisesRegex(BadArg, 'no value for arg'):
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd')
+
+        with self.assertRaisesRegex(
+            BadArg, 'positional arguments after key-value arguments'
+        ):
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd int_arg=1 1')
+
+        with self.assertRaisesRegex(BadArg, 'no value for arg'):
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd bool_arg=true')
+
+        with self.assertRaisesRegex(BadArg, 'argument with name'):
+            CommandBot._get_kwargs_from_msg(cmd, '/cmd not_existing_arg=true')
 
     def test_check_args(self):
         CommandBot._check_args(cmd)

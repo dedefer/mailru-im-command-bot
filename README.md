@@ -5,7 +5,7 @@
 ![coverage](https://img.shields.io/codecov/c/github/dedefer/mailru-im-command-bot?color=green&style=for-the-badge)
 
 mailru_im_command_bot is convenient library for generic myteam/icq bots.
-In fact it is wrapper for mailru-im-bot.
+In fact it is a wrapper for mailru-im-bot.
 
 It uses type annotations for help method and transforming arguments.
 
@@ -45,6 +45,8 @@ def example_command(
     float_arg: float = 1.0,  # optional
     str_arg: str = 'test_str',  # optional
     enum_arg: ExampleEnum = ExampleEnum.case_one,  # optional
+    implicit_str_arg='test_str',  # optional
+    bool_arg: bool = True,  # optional
 ) -> str:
     """your function help message"""
     ...
@@ -87,6 +89,14 @@ Bot accepts messages like this:
 ...etc
 ```
 
+It also can accept key-value arguments:
+
+```text
+/example_command int_arg=1
+/example_command 1 enum_arg=case_two
+/example_command int_arg=1 enum_arg=case_two
+```
+
 As argument type you can use str, float, int and any enum.Enum. Library automatically validates and casts strings to your types.
 
 Your help message will be like this:
@@ -102,6 +112,8 @@ list of commands:
       float_arg: float = 1.0
       str_arg: str = test_str
       enum_arg: case_one|case_two = case_one
+      implicit_str_arg: str = test_str
+      bool_arg: True|False = True
 ```
 
 Bot automatically writes access log with provided logger.
@@ -110,4 +122,4 @@ Bot automatically writes access log with provided logger.
 [ACCESS] [user_id]@[chat_id] /example_command elapsed=0.1s
 ```
 
-If an exception occured bot will write the error into log, send `'some error occured'` to user and report error to users in `alert_to` list.
+If an exception occurred bot will write the error into log, send `'some exception occurred'` to user and report error to users in `alert_to` list.
