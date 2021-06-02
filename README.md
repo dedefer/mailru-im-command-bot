@@ -1,4 +1,8 @@
 # mailru_im_command_bot
+[![PyPI](https://img.shields.io/pypi/v/mailru-im-command-bot?style=for-the-badge)](https://pypi.org/project/mailru-im-command-bot)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mailru-im-command-bot?style=for-the-badge)
+![tests](https://img.shields.io/github/workflow/status/dedefer/mailru-im-command-bot/lint%20and%20test/main?label=tests&style=for-the-badge)
+![coverage](https://img.shields.io/codecov/c/github/dedefer/mailru-im-command-bot?color=green&style=for-the-badge)
 
 mailru_im_command_bot is convenient library for generic myteam/icq bots.
 In fact it is wrapper for mailru-im-bot.
