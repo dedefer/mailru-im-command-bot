@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "mailru-im-command-bot"
+version = "0.1.0"
+description = "Tiny lib for icq/myteam command bots"
+authors = ["Danila Fomin <ddf1998@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/dedefer/mailru-im-command-bot"
+keywords = ["myteam", "icq", "bot", "command"]
+classifiers = [
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+mailru-im-bot = ">=0.0.18"
+
+
+[tool.poetry.dev-dependencies]
+mypy = "^0.812"
+flake8 = "^3.9.2"
+isort = "^5.8.0"
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+multi_line_output = 5
+balanced_wrapping = true
+include_trailing_comma = true
