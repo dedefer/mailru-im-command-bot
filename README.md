@@ -7,6 +7,8 @@ It uses type annotations for help method and transforming arguments.
 
 It is fully tested and production-ready)
 
+[Pypi link](https://pypi.org/project/mailru-im-command-bot)
+
 ## Usage
 
 You can create your bot with following code:
