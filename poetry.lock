@@ -164,7 +164,7 @@ dmypy = ["psutil (>=4.0)"]
 name = "mypy-extensions"
 version = "0.4.3"
 description = "Experimental type system extensions for programs checked with the mypy typechecker."
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 
@@ -262,7 +262,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pyt
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "7d1df61edd5b1136e9a455a1a05e7ee44df01cd4a900345a839fd9ff6f199036"
+content-hash = "e406a684547a585c89fe35c80f01f30c68f3a3650477f3d4f035415e782daad0"
 
 [metadata.files]
 cached-property = [

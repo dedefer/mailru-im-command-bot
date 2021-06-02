@@ -69,9 +69,6 @@ bot = CommandBot(
     help_message='your bot description',
 )
 
-...
-
-base_bot.start_polling()
 ```
 
 Bot accepts messages like this:
