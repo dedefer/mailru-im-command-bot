@@ -18,9 +18,75 @@ It is fully tested and production-ready)
 You can create your bot with following code:
 
 ```python
+import logging
+
 from mailru_im_command_bot import CommandBot, MessageEnv
-from logging import getLogger
+
+logging.basicConfig(level=logging.INFO)
+
+bot = CommandBot(
+    token='your_token',
+    help_message='this is simple hello world bot'
+)
+
+
+@bot.command('hello')
+def hello(env: MessageEnv, name='world') -> str:
+    return f'hello {name}'
+
+
+bot.start()
+```
+
+Bot will response you:
+
+```text
+you: /hello
+bot: hello world
+
+you: /hello danila
+bot: hello danila
+```
+
+Help message will be:
+
+```text
+this is simple hello world bot
+
+list of commands:
+/hello
+  args:
+    name: str = world
+```
+
+## Advanced Usage
+
+Bot can automatically parse int, float, bool, any enum.Enum
+and also any type that implements mailru_im_command_bot.CustomParam protocol:
+
+```python
 import enum
+import logging
+from logging import getLogger
+
+from mailru_im_command_bot import BadArg, CommandBot, MessageEnv
+
+logging.basicConfig(level=logging.INFO)
+
+
+class Email(str):
+    @classmethod
+    def verbose_classname(cls) -> str:
+        return cls.__name__
+
+    @classmethod
+    def from_arg(cls, arg: str) -> 'Email':
+        if '@' not in arg:
+            raise BadArg(f'{arg} is invalid email')
+        return cls(arg)
+
+    def to_arg(self) -> str:
+        return str(self)
 
 
 class ExampleEnum(enum.Enum):
@@ -29,14 +95,14 @@ class ExampleEnum(enum.Enum):
 
 
 bot = CommandBot(
-    # you can provide any bot.Bot kwargs
-    token='your_token_here',
+    token='tour_token',
     name='your_bot_name',
-    version='your_bot_version',
+    version='1.0.0',
     logger=getLogger(__name__),
-    alert_to=['danila.fomin@corp.mail.ru'],
+    alert_to=['your_id'],
     help_message='your bot description',
 )
+
 
 @bot.command('example_command')
 def example_command(
@@ -45,12 +111,13 @@ def example_command(
     float_arg: float = 1.0,  # optional
     str_arg: str = 'test_str',  # optional
     enum_arg: ExampleEnum = ExampleEnum.case_one,  # optional
-    implicit_str_arg='test_str',  # optional
     bool_arg: bool = True,  # optional
+    email_arg: Email = Email('ddf1998@gmail.com'),  # optional
 ) -> str:
     """your function help message"""
     ...
-    return 'your result'
+    return 'response'
+
 
 bot.start()
 ```
@@ -97,29 +164,27 @@ It also can accept key-value arguments:
 /example_command int_arg=1 enum_arg=case_two
 ```
 
-As argument type you can use str, float, int and any enum.Enum. Library automatically validates and casts strings to your types.
-
 Your help message will be like this:
 
 ```text
 your bot description
 
 list of commands:
-  /example_command
-    your function help message
-    args:
-      int_arg: int
-      float_arg: float = 1.0
-      str_arg: str = test_str
-      enum_arg: case_one|case_two = case_one
-      implicit_str_arg: str = test_str
-      bool_arg: True|False = True
+/example_command
+  your function help message
+  args:
+    int_arg: int
+    float_arg: float = 1.0
+    str_arg: str = test_str
+    enum_arg: case_one|case_two = case_one
+    bool_arg: True|False = True
+    email_arg: Email = ddf1998@gmail.com
 ```
 
 Bot automatically writes access log with provided logger.
 
 ```text
-[ACCESS] [user_id]@[chat_id] /example_command elapsed=0.1s
+[ACCESS] [user_id]@[chat_id] /example_command elapsed=0.100s
 ```
 
 If an exception occurred bot will write the error into log, send `'some exception occurred'` to user and report error to users in `alert_to` list.

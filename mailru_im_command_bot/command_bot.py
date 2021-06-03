@@ -1,42 +1,19 @@
-from dataclasses import dataclass
-from enum import Enum, EnumMeta
+from enum import Enum
 from inspect import Parameter, signature
 from logging import Logger, getLogger
 from textwrap import dedent, indent
 from time import time
 from traceback import format_exc
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from bot.bot import Bot, Event
 from bot.handler import CommandHandler as StdCommandHandler
 from bot.handler import HelpCommandHandler, StartCommandHandler
-from mypy_extensions import KwArg, VarArg
 
-
-@dataclass
-class MessageEnv:
-    bot: Bot
-    event: Event
-    user_id: str
-
-
-class BadArg(Exception):
-    pass
-
-
-class ImproperlyConfigured(Exception):
-    pass
-
-
-ArgType = Union[str, int, float, bool, Enum]
-
-ArgSigType = Union[Type[str], Type[int], Type[float], Type[bool], EnumMeta]
-
-CommandHandler = Callable[[MessageEnv, VarArg(ArgType), KwArg(ArgType)], str]
-
-Handler = Callable[[Bot, Event], None]
-
-Decorator = Callable[[Handler], Handler]
+from .types import (
+    ArgSigType, ArgType, BadArg, CommandHandler, CustomParam,
+    Decorator, Handler, ImproperlyConfigured, MessageEnv,
+)
 
 
 class CommandBot:
@@ -113,7 +90,7 @@ class CommandBot:
         return decorator
 
     def register_help(self):
-        help_cb = self._access_log(self._help_cb)
+        help_cb = self._access_log_decorator(self._help_cb)
         self.bot.dispatcher.add_handler(
             HelpCommandHandler(callback=help_cb),
         )
@@ -127,7 +104,7 @@ class CommandBot:
         self.bot.start_polling()
 
     @classmethod
-    def _gen_param_str(cls, param: Parameter) -> str:
+    def _format_param(cls, param: Parameter) -> str:
         types_to_str = {
             int: 'int',
             float: 'float',
@@ -141,7 +118,13 @@ class CommandBot:
                 param_str += f' = {param.default}'
             return param_str
 
-        if isinstance(param.annotation, EnumMeta):
+        if issubclass(param.annotation, CustomParam):
+            param_str = f'{param.name}: {param.annotation.verbose_classname()}'
+            if param.default is not param.empty:
+                param_str += f' = {param.default.to_arg()}'
+            return param_str
+
+        if issubclass(param.annotation, Enum):
             vars = '|'.join(e.name for e in param.annotation)  # type: ignore
             param_str = f'{param.name}: {vars}'
             if param.default is not param.empty:
@@ -155,7 +138,7 @@ class CommandBot:
         return param_str
 
     @classmethod
-    def _gen_function_help(cls, path: str, func: CommandHandler) -> str:
+    def _format_function_help(cls, path: str, func: CommandHandler) -> str:
         doc = [f'/{path}']
 
         desc = dedent(func.__doc__ or '').strip()
@@ -163,7 +146,7 @@ class CommandBot:
             doc.append(indent(desc, '  '))
 
         sig = "\n".join(
-            indent(cls._gen_param_str(p), '  ')
+            indent(cls._format_param(p), '  ')
             for p in cls._parameters(func)
         )
         if sig:
@@ -176,11 +159,11 @@ class CommandBot:
         return list(signature(func).parameters.values())[1:]
 
     @classmethod
-    def _gen_help(
+    def _format_help_message(
         cls, help_message: str, funcs: Iterable[Tuple[str, CommandHandler]],
     ) -> str:
         message = '\n\n'.join(
-            cls._gen_function_help(path, cb)
+            cls._format_function_help(path, cb)
             for path, cb in funcs
         )
 
@@ -193,50 +176,67 @@ class CommandBot:
     def _help_cb(self, bot, event):
         bot.send_text(
             chat_id=event.from_chat,
-            text=self._gen_help(self.help_message, self.paths),
+            text=self._format_help_message(self.help_message, self.paths),
         )
+
+    @classmethod
+    def _format_error_message(
+        cls, user: str, message: Union[str, Callable[[], str]],
+    ) -> str:
+        if callable(message):
+            message = message()
+
+        return f'ERROR: user={user}\n\n{message}'
 
     def _send_error_message(
         self,
         user: str = '__unknown__',
         message: Union[str, Callable[[], str]] = format_exc,
     ):
-        if callable(message):
-            message = message()
-
-        msg_text = f'user: {user}\n\n{message}'
-
         for alert_chat_id in self.alert_to:
             try:
                 self.bot.send_text(
                     chat_id=alert_chat_id,
-                    text=f'ERROR: {msg_text}',
+                    text=self._format_error_message(user, message),
                 )
             except Exception as e:
                 self.logger.exception(f'an error while reporting error: {e}')
 
-    def _access_log(self, func: Handler) -> Handler:
+    @classmethod
+    def _access_log(
+        cls,
+        log: Callable[[str], None],
+        log_error: Callable[[str, Exception], None],
+        user_and_chat: str, message: str,
+        handler: Callable[[], None],
+    ):
+        start_t = time()
+        path = '{not a path}'
+
+        splitted = message.split()
+        if len(splitted) > 0 and splitted[0].startswith('/'):
+            path, *_ = splitted
+
+        access_msg = f'[ACCESS] {user_and_chat} {path}'
+        try:
+            log(access_msg)
+            handler()
+        except Exception as e:
+            log_error(user_and_chat, e)
+        finally:
+            log(f'{access_msg} elapsed={time() - start_t:.3f}s')
+
+    def _log_exception(self, user_and_chat: str, e: Exception):
+        self.logger.error(e, exc_info=True)
+        self._send_error_message(user_and_chat)
+
+    def _access_log_decorator(self, func: Handler) -> Handler:
         def decorated(bot: Bot, event: Event):
-            start_t = time()
-            user_and_chat = f'[{self._get_user(event)}]@[{event.from_chat}]'
-            try:
-                path = event.text.split()[0]
-                path = '{not a path}' if not path.startswith('/') else path
-
-                self.logger.info(
-                    f'[ACCESS] {user_and_chat} {path}'
-                )
-
-                func(bot, event)
-            except Exception as e:
-                self.logger.error(e, exc_info=True)
-                self._send_error_message(user_and_chat)
-            finally:
-                elapsed = time() - start_t
-                self.logger.info(
-                    f'[ACCESS] {user_and_chat} {path} '
-                    f'elapsed={elapsed:.3f}s'
-                )
+            self._access_log(
+                self.logger.info, self._log_exception,
+                f'[{self._get_user(event)}]@[{event.from_chat}]',
+                event.text, lambda: func(bot, event),
+            )
 
         return decorated
 
@@ -245,13 +245,12 @@ class CommandBot:
         for p in cls._parameters(func):
             ann = p.annotation
             if ann is not p.empty:
-                if (
-                    ann not in (str, int, float, bool) and
-                    not isinstance(ann, EnumMeta)
+                if not issubclass(
+                    ann, (str, int, float, bool, Enum, CustomParam),
                 ):
                     raise ImproperlyConfigured(
                         f'improperly configured: param type {p} '
-                        'is not supported. must be str, int or float, or Enum'
+                        f'is not supported. must be {ArgType}'
                     )
             else:
                 ann = str
@@ -271,19 +270,16 @@ class CommandBot:
     ) -> ArgType:
         ann: ArgSigType = param.annotation
 
-        if isinstance(ann, EnumMeta):
+        if issubclass(ann, CustomParam):
+            return ann.from_arg(arg)
+
+        if issubclass(ann, Enum):
             try:
                 return ann[arg]
             except KeyError:
                 raise BadArg(f'{arg!r} is bad param for {ann}')
 
-        if ann in (float, int):
-            try:
-                return ann(arg)
-            except ValueError:
-                raise BadArg(f'can\'t cast param {arg!r} to {ann}')
-
-        if ann is bool:
+        if issubclass(ann, bool):
             arg = arg.lower()
             if arg == 'true':
                 return True
@@ -291,6 +287,12 @@ class CommandBot:
                 return False
             else:
                 raise BadArg(f'can\t cast param {arg!r} to {ann}')
+
+        if issubclass(ann, (float, int)):
+            try:
+                return ann(arg)
+            except ValueError:
+                raise BadArg(f'can\'t cast param {arg!r} to {ann}')
 
         return arg
 
@@ -349,47 +351,39 @@ class CommandBot:
         return kwargs
 
     @classmethod
-    def _get_kwargs_from_msg(
+    def _gen_kwargs_from_msg(
         cls, func: CommandHandler, msg: str,
     ) -> Dict[str, ArgType]:
         msg_args = [a for a in msg.split() if a][1:]
         return cls._gen_kwargs(cls._parameters(func), msg_args)
 
+    @classmethod
+    def _command_args(
+        cls,
+        send: Callable[[str], None],
+        path: str, handler: CommandHandler,
+        env: MessageEnv, message: str,
+    ):
+        try:
+            kwargs = cls._gen_kwargs_from_msg(handler, message)
+        except BadArg as e:
+            send(f'{e}\n{cls._format_function_help(path, handler)}')
+            return
+
+        try:
+            send(handler(env, **kwargs))
+        except Exception:
+            send('some error occurred')
+            raise
+
     def _command_args_decorator(
         self, path: str, func: CommandHandler,
     ) -> Handler:
         def decorated(bot: Bot, event: Event):
-            try:
-                kwargs = self._get_kwargs_from_msg(func, event.data['text'])
-            except BadArg as e:
-                bot.send_text(
-                    chat_id=event.from_chat,
-                    text=f'{e}\n' + self._gen_function_help(path, func),
-                )
-                return
-
-            try:
-                resp = func(
-                    MessageEnv(
-                        bot=bot,
-                        event=event,
-                        user_id=self._get_user(event)
-                    ),
-                    **kwargs
-                )
-                bot.send_text(
-                    chat_id=event.from_chat,
-                    text=resp
-                )
-            except Exception as e:
-                self.logger.error(e, exc_info=True)
-                self._send_error_message(
-                    f'[{self._get_user(event)}]@[{event.from_chat}]'
-                )
-                bot.send_text(
-                    chat_id=event.from_chat,
-                    text='some exception occurred'
-                )
+            self._command_args(
+                lambda msg: bot.send_text(event.from_chat, msg), path, func,
+                MessageEnv(bot, event, self._get_user(event)), event.text,
+            )
 
         return decorated
 
@@ -399,7 +393,7 @@ class CommandBot:
         for decorator in self.decorators:
             decorated = decorator(decorated)
 
-        decorated = self._access_log(decorated)
+        decorated = self._access_log_decorator(decorated)
 
         return decorated
 
