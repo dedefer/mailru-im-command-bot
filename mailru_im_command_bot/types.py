@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Protocol, Type, Union, runtime_checkable
+from typing import Callable, Type, Union
 
 from bot.bot import Bot, Event
 from mypy_extensions import KwArg, VarArg
+from typing_extensions import Protocol, runtime_checkable
 
 
 @dataclass

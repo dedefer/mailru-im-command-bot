@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mailru-im-command-bot"
-version = "0.1.7"
+version = "0.1.8"
 description = "Tiny lib for icq/myteam command bots"
 authors = ["Danila Fomin <ddf1998@gmail.com>"]
 license = "MIT"
